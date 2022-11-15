@@ -1,0 +1,999 @@
+---
+format:
+    revealjs: 
+        theme: default
+        logo: img/logo.png
+        footer: "SAP Seminar 2022-11-15"
+        transition: slide
+        background-transition: fade
+        transition-speed: fast
+fig-dpi: 1500
+slide-number: true
+show-slide-number: all
+results: asis
+html-math-method: katex
+bibliography: "references.bib"
+csl: "apa7.csl"
+---
+
+# Cognateness and non-native spoken word recognition {background-color="white"}
+
+<br><br>
+
+Gonzalo Garcia-Castro &nbsp; [`r fontawesome::fa("github", "black")`](https://github.com/gongcastro), 
+Serene Siow, Nuria Sebastian-Galles, Kim Plunkett
+
+![](img/logo.png){.absolute bottom=0 left=0 width="100"}
+
+![](img/oxford-logo.png){.absolute bottom=0 right=0 width="100"}
+
+
+```{r}
+#| label: load-objects
+#| echo: false
+#| warnings: false
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(stringr)
+library(ggplot2)
+library(ggsci)
+library(gt)
+library(gtExtras)
+library(loo)
+library(brms)
+library(parameters)
+library(tidybayes)
+library(scales)
+library(forcats)
+library(janitor)
+library(papaja)
+library(purrr)
+library(tidytext)
+library(patchwork)
+
+# load helper functions
+source("R/utils.R")
+
+# for reproducibility
+set.seed(888)
+
+# set custom ggplot theme
+theme_set(theme_custom())
+my_colours <- c("#1A85FF", "#ff2976", "#FFC20A")
+
+options(
+    knitr.kable.NA = '-',
+    htmltools.preserve.raw = FALSE,
+    knitr.duplicate.label = "allow",
+    ggplot2.ordinal.colour = my_colours,
+    ggplot2.ordinal.fill = my_colours,
+    ggplot2.discrete.fill = my_colours,
+    ggplot2.discrete.colour = my_colours,
+    ggplot2.continuous.fill = ggplot2::scale_fill_gradient2(
+        low = "#04bf78", 
+        mid = "white", 
+        high = "#FFC20A", 
+        na.value = "white", 
+        limits = c(-0.4, 0.4)
+    ),
+    ggplot2.continuous.colour = ggplot2::scale_fill_gradient2(
+        low = "#04bf78", 
+        mid = "white",
+        high = my_colours[3], 
+        na.value = "white",
+        limits = c(-0.4, 0.4)
+    )
+)
+
+# load data
+results <- list.files("data", pattern = ".rds", full.names = TRUE) %>% 
+    map(readRDS) %>% 
+    set_names(str_remove(list.files("data", pattern = ".rds"), ".rds"))
+
+results$stimuli <- results$stimuli %>% 
+    mutate(group = factor(group, levels = c("cat-ENG", "spa-ENG", "cat-SPA"), ordered = TRUE))
+
+results$responses <- results$responses %>% 
+    mutate(group = factor(group, levels = c("cat-ENG", "spa-ENG", "cat-SPA"), ordered = TRUE))
+
+str_repl <- c(
+    "Intercept" = "Intercept",
+    "freq_zipf_2_std" = "Frequency [+1 SD]",
+    "nd_std" = "Neighbours [+1 SD]",
+    "lv_std" = "Levenshtein [+1 SD]",
+    "nd_std:lv_std" = "Neighbours \u00d7 Cognateness",
+    "groupeng_spa" = "Group [spa/cat-ENG vs. cat-SPA]",
+    "groupcateng_spaeng" = "Group [cat-ENG vs. spa-ENG]",
+    "groupspaMENG" = "Group [cat-ENG vs. spa-ENG]"
+    
+)
+
+```
+
+
+## Non-native speech processing
+
+- Costly even for high proficiency bilinguals [@takata1990english]
+- Some sounds embedded in non-native speech are not represented in the native phoneme inventory
+
+::: {.callout-tip}
+
+## Example 
+/pɔʁt/ (porte) [*door*, in French]
+:::
+
+## Non-native speech processing
+
+- Although this mismatch has a toll on comprehension [@cutler2004patterns], recognition can take place [@weber2004lexical] 
+- Even low-proficiency listeners are rarely naïve to the language they listen to
+
+## Language similarity
+
+- Most languages share similarities at the lexical level
+- **Cognates**: form-similar translation equivalents
+
+::: {.callout-tip icon=false}
+
+## Example
+
+/pɔʁt/ (porte) and /pweɾta/ (puerta), [*door*, in French and Spanish]
+
+:::
+
+- Cognates play a pivotal role in models of bilingual lexical processing
+- Form similarity between translations facilitates word comprehension, production and translation
+
+---
+
+![](img/comprehension.png){fig-align="center"}
+
+---
+
+![](img/comprehension-bilingual.png){fig-align="center"}
+
+---
+
+![](img/translation-conceptual-1.png){fig-align="center"}
+---
+
+![](img/translation-conceptual-2.png){fig-align="center"}
+
+---
+
+![](img/translation-lexical.png){fig-align="center"}
+
+
+
+---
+
+Reliance on the conceptual or the lexical route is modulated by **proficiency** [@potter1984lexical].
+
+::: {.columns}
+
+::: {.column width="50%"}
+
+::: {.callout-note appearance="simple" icon=false}
+
+## Low-proficiency bilinguals
+
+- Rely more strongly on word-word associations
+- Word-word associations are sensitive to word-level variables (e.g., cognateness)
+
+:::
+
+:::
+
+::: {.column width="50%"}
+
+::: {.callout-note appearance="simple" icon=false}
+
+## High proficiency bilinguals
+
+- Rely more strongly on word-concept associations
+- Word-concept associations are sensitive to conceptual variables (e.g., concreteness)
+
+:::
+
+:::
+
+:::
+
+As proficiency increases, word-level variables exert a lesser impact on L2 comprehension.
+
+Revised Hierarchical Model [RMS; @degroot1994forward]
+
+---
+
+* More recent papers have found no differences in sensitivity to cognateness between low- and high-proficiency bilinguals. [@christoffels2006memory].
+
+* **Multilink model** simulates data from translation experiments [@christoffels2006memory] without any word-to-word link across languages @dijkstra2019multilink].
+
+<br>
+
+Are word-to-word links really necessary for translation?
+
+---
+
+* @christoffels2006memory: sample of highly proficient bilinguals: reliance on word-to-word connections is expected in **low-proficiency bilinguals**!
+* Multilink assumes **identical vocabulary sizes and strength of word-concept associations** across L1 and L2
+* **Visual paradigms** (orthography) overrepresented
+
+<br>
+
+Simulations/results generalisable to **low-proficiency bilinguals**, and to other modalities?
+
+
+## The present study
+
+**Aim**: testing the role of cognateness in auditory word comprehension in an unfamiliar language
+
+Unfamiliar listeners $\equiv$ Low proficiency bilinguals
+
+1. Adults listened to words in an unfamiliar language
+2. After each word, they were asked to type their best-guess translation
+
+## The present study
+
+::: {.callout-tip}
+
+## Hypotheses
+
+- No semantic knowledge about presented words
+- No word-concept associations
+- Only word-to-word associations are available
+- Reliance on cognateness should be reflected on a higher probability of correct translations
+:::
+
+# Study 1
+
+```{r}
+#| label: participants-sample-sizes
+participants_total <- nrow(distinct(results$participants, participant_id))
+participants_group <- count(results$participants, group)
+```
+
+## Participants
+
+**`r participants_total` participants**
+
+<br>
+<br>
+
+```{r}
+#| label: tbl-participants
+#| out-width: 100%
+#| results: asis
+results$participants %>% 
+    filter(valid_participant) %>% 
+    replace_na(list(l2 = "None")) %>% 
+    mutate(
+        across(c(ends_with("_oral"), ends_with("_written")), as.integer),
+        language_oral = ifelse(test_language=="Catalan", catalan_oral, spanish_oral),
+        language_written = ifelse(test_language=="Catalan", catalan_written, spanish_written),
+        l2_prof = (l2 != "None") & (l2oral > 3),
+    ) %>% 
+    group_by(group) %>% 
+    summarise(
+        n = n(),
+        age_mean = mean(age, na.rm = TRUE),
+        age_sd = sd(age, na.rm = TRUE),
+        language_oral_mean = mean(language_oral, na.rm = TRUE),
+        language_oral_sd = sd(language_oral, na.rm = TRUE),
+        language_written_mean = mean(language_written, na.rm = TRUE),
+        language_written_sd = sd(language_written, na.rm = TRUE),
+        .groups = "drop"
+    ) %>% 
+    gt() %>% 
+    tab_header(title = "Participant characteristics") %>% 
+    fmt_number(age_mean:age_sd) %>% 
+    fmt_number(c(matches("oral|written"), n, -matches("data"))) %>% 
+    cols_merge_uncert(col_val = age_mean, col_uncert = age_sd) %>% 
+    cols_merge_uncert(col_val = language_oral_mean, col_uncert = language_oral_sd) %>% 
+    cols_merge_uncert(col_val = language_written_mean, col_uncert = language_written_sd) %>% 
+    cols_label(
+        group = "Group",
+        n = "N",
+        age_mean = "Age (years)",
+        language_oral_mean = "Oral proficiency",
+        language_written_mean = "Written proficiency"
+    ) %>% 
+    tab_style(cell_text(weight = "bold"), cells_column_labels()) %>% 
+    tab_options(container.width = 800, container.height = 800) 
+
+
+```
+
+## Design
+
+![](img/design.png){fig-align="center"}
+
+## Stimuli
+
+Three predictors:
+
+- **Lexical frequency** of the correct translation
+- **Number of neighbours** of the presented word in the language of the correct translation
+- **Cognateness**: Levenshtein similarity between the presented word and its correct translation
+- **Group**: groups the participant belongs to (cat-ENG, spa-ENG, cat-SPA)
+
+## Data analysis
+
+- Binomial logistic regression (correct/incorrect)
+- Multilevel (random effects by participants and word)
+- Bayesian:
+
+$$P(model | data) \propto P(data | model) \times P(model)$$
+
+
+## Stimuli
+
+```{r}
+#| label: tbl-stimuli
+results$stimuli %>% 
+    select(group, word_1, freq_2, freq_zipf_2, nd, lv) %>% 
+    group_by(group) %>% 
+    summarise(
+        n = n(),
+        across(
+            freq_2:lv, 
+            list(
+                median = ~median(., na.rm = TRUE),
+                sd = ~sd(., na.rm = TRUE)
+            )
+        )
+    ) %>%
+    gt(rowname_col = "group") %>% 
+    tab_header(title = "Median and standard deviation of main predictors") %>% 
+    fmt_number(freq_2_median:nd_sd) %>%
+    fmt_percent(matches("lv|global")) %>% 
+    cols_merge_uncert(col_val = freq_2_median, col_uncert = freq_2_sd) %>% 
+    cols_merge_uncert(col_val = freq_zipf_2_median, col_uncert = freq_zipf_2_sd) %>% 
+    cols_merge_uncert(col_val = nd_median, col_uncert = nd_sd) %>% 
+    cols_merge_uncert(col_val = lv_median, col_uncert = lv_sd) %>% 
+    cols_label(
+        freq_2_median = md("Frequency (per million)"),
+        freq_zipf_2_median = md("Frequency (Zipf)"),
+        nd_median = md("Cross-language neighbours"),
+        lv_median = md("Levenshtein similarity"),
+        n = md("*N*")
+    ) %>% 
+    summary_rows(
+        columns = c(matches("median"), -matches("lv")),
+        fns = list(Median = "median", SD = "sd")
+    ) %>% 
+    summary_rows(
+        columns = matches("lv"),
+        fns = list(Median = "median", SD = "sd"), 
+        formatter = fmt_percent
+    ) %>% 
+    tab_style(
+        style = cell_text(align = "left", weight = "bold", size = "medium"),
+        locations = cells_title(groups = "title")
+    ) %>% 
+    tab_style(
+        style = cell_text(align = "left", size = "medium", style = "italic"),
+        locations = cells_title(groups = "subtitle")
+    ) %>% 
+    tab_style(
+        style = cell_text(align = "left", size = "medium"),
+        locations = cells_source_notes()
+    ) %>% 
+    tab_style(
+        style = cell_text(align = "left", size = "medium"),
+        locations = cells_stub_grand_summary()
+    ) %>% 
+    tab_style(
+        style = cell_borders(sides = c("left", "right"), color = "white"),
+        locations = list(
+            cells_body(),
+            cells_row_groups(),
+            cells_column_spanners(), 
+            cells_stub(),
+            cells_stub_grand_summary(), 
+            cells_source_notes(),
+            cells_column_labels(),
+            cells_stubhead()
+        )
+    ) %>% 
+    tab_style(
+        style = list(
+            cell_text(align = "left", size = "medium"),
+            cell_borders(sides = "all", color = "white")
+        ),
+        locations = cells_stub()
+    ) %>% 
+    tab_style(
+        style = cell_text(
+            align = "center", 
+            size = "medium",
+            weight = "bold",
+            style = "normal"
+        ),
+        locations = list(cells_column_labels())
+    ) %>% 
+    tab_style(
+        style = cell_borders(sides = "all", color = "white"),
+        locations = cells_body(columns = 1:9)
+    ) %>% 
+    tab_style(
+        style = cell_borders(sides = "top", color = "white"),
+        locations = cells_body(columns = 1:9)
+    )
+```
+
+
+## Results
+
+### Regression coefficients
+
+```{r}
+#| label: tbl-model-coefs
+coefs <- model_parameters(results$fit_5) %>%
+    as_tibble() %>% 
+    clean_names() %>% 
+    mutate(
+        parameter = str_remove(parameter, "b_"),
+        across(median:ci_high, ~ifelse(parameter=="(Intercept)", plogis(.), ./4))
+    ) %>% 
+    select(-ci) 
+
+coefs %>% 
+    mutate(
+        parameter = factor(parameter, levels = names(str_repl), labels = str_repl, ordered = TRUE),
+        across(starts_with("ci_"), ~percent(., accuracy = 0.01)),
+        ci = paste("[", ci_low, ", ", ci_high, "]")
+    ) %>% 
+    arrange(parameter) %>% 
+    select(-starts_with("ci_"), -c(rhat, ess)) %>% 
+    relocate(parameter, median, ci, pd) %>% 
+    gt() %>% 
+    fmt_percent(c(median, pd)) %>% 
+    cols_label(
+        parameter = "Predictor",
+        median = "Median",
+        ci = "95% CrI",
+        pd = "P(Direction)"
+    ) %>% 
+    cols_align(align = "right")
+```
+
+---
+
+### Regression coefficients
+
+```{r}
+#| label: fig-coefs-fixed
+coefs <- fixef(results$fit_5) %>% 
+    as.data.frame() %>% 
+    rownames_to_column("variable") %>% 
+    clean_names() %>% 
+    mutate(across(estimate:q97_5, ~logit_to_prob(., variable))) %>%
+    group_split(variable) %>% 
+    set_names(make_clean_names(map(., "variable"))) %>% 
+    map(select, -variable) %>% 
+    map(unlist)
+
+post_draws <-  gather_draws(results$fit_5, `b_.*`, `sd_.*`, regex = TRUE) 
+
+post_draws %>% 
+    filter(str_detect(.variable, "b_")) %>% 
+    mutate(
+        .variable_name = factor(
+            gsub("b_", "", .variable),
+            levels = names(str_repl),
+            labels = str_repl
+        ),
+        .value = logit_to_prob(.value, .variable)
+    ) %>% 
+    arrange(.variable) %>% 
+    ggplot(aes(.value, fct_rev(.variable_name))) +
+    geom_vline(xintercept = 0, colour = "grey", size = 1) + 
+    stat_slab(size = 1, position = position_nudge(y = 0.15),
+              fill = NA, scale = 0.5, colour = my_colours[1]) +
+    stat_pointinterval(position = position_dodge(width = 0.25), .width = 0.95,
+                       point_size = 2, interval_size = 1.25) +
+    scale_fill_manual(values = my_colours, na.translate = FALSE) +
+    scale_x_continuous(labels = ~percent(., accuracy = 1), breaks = seq(-1, 1, 0.1)) +
+    labs(
+        x = "P(Correct)", 
+        y = "Posterior probability density",
+        fill = "Study",
+        colour = "Study"
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text = element_text(colour = "black", hjust = 1, size = 12),
+        axis.ticks.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", linewidth = 0.5, linetype = "dotted")
+    ) 
+```
+
+---
+
+### Population-level marginal effects
+
+```{r}
+#| label: fig-marginal-effects
+#| fig-width: 9
+#| fig-height: 4
+#| warnings: false
+#| messages: false
+nd <- expand.grid(
+    lv_std = seq(
+        min(results$fit_5$data$lv_std, na.rm = TRUE),
+        max(results$fit_5$data$lv_std, na.rm = TRUE),
+        by = 0.1
+    ),
+    freq_zipf_2_std = 0,
+    nd_std = scale_values(c(0, 3, 6), results$fit_5$data$nd),
+    group = NA
+)
+
+m <- add_epred_draws(nd, results$fit_5, re_formula = NA, ndraws = 50) %>% 
+    mutate(
+        nd_lab = rescale_values(nd_std, results$fit_5$data$nd) %>% 
+            paste0(" neighbours") %>% 
+            factor(levels = paste0(c(0, 3, 6), " neighbours")),
+        lv = rescale_values(lv_std, results$responses$lv)
+    )
+
+ggplot(m, aes(x = lv, y = .epred)) +
+    facet_grid(~nd_lab) +
+    geom_hline(yintercept = 0.5, size = 1, colour = "grey") +
+    geom_line(aes(group = interaction(nd_std, .draw)),
+              size = 0.75, alpha = 0.1, colour = my_colours[1]) +
+    stat_summary(fun = mean, geom = "line", size = 1, colour = my_colours[1]) +
+    labs(
+        x = "Phonological similarity (Levenshtein)",
+        y = "P(Correct)",
+        title = "Population-level posterior predictions"
+    ) +
+    scale_x_continuous(labels = percent) +
+    scale_y_continuous(labels = percent) +
+    theme(
+        legend.position = "none",
+        plot.title = element_blank()
+    )
+```
+
+
+---
+
+### Word-level marginal effects
+
+```{r}
+#| label: fig-coefs-word
+#| fig-height: 6
+#| fig-width: 4
+#| warnings: false
+#| messages: false
+# empirical_means <- results$responses %>% 
+#     group_by(group) %>% 
+#     summarise(successes = sum(correct, na.rm = TRUE), n = n(), .groups = "drop") %>% 
+#     mutate(
+#         prop = prop_adj(successes, n),
+#         prop_se = prop_adj_se(successes, n)
+#     )
+# 
+# empirical_accuracy <- results$responses %>% 
+#     mutate(translation = paste0(translation, " (", percent(lv, accuracy = 1), ")")) %>% 
+#     group_by(group, translation, lv) %>% 
+#     summarise(prop = mean(correct), .groups = "drop")
+# 
+# nd_re_words <- expand.grid(
+#     translation_id = unique(results$fit_5$data$translation_id),
+#     nd_std = 0,
+#     freq_zipf_2_std = 0,
+#     lv_std = 0,
+#     group = NA
+# )
+# 
+# questionnaire_nd_re_words <- expand.grid(
+#     translation_id = unique(results$fit_5$data$translation_id),
+#     nd_std = 0,
+#     freq_zipf_2_std = 0,
+#     lv_std = 0,
+#     group = NA
+# )
+# 
+# post_re <- add_epred_draws(nd_re_words, results$fit_5, ndraws = 50, re_formula = ~ (1 | translation_id))
+# 
+# post_re <- post_re %>% 
+#     group_by(translation_id, nd_std, freq_zipf_2_std, lv_std, group) %>% 
+#     summarise(
+#         .mean = mean_qi(.epred)[,1], 
+#         .lower = mean_qi(.epred)[,2],
+#         .upper = mean_qi(.epred)[,3],
+#         .groups = "drop"
+#     ) %>% 
+#     ungroup() %>% 
+#     select(-c(group)) %>% 
+#     left_join(select(results$stimuli, group, translation, translation_id, lv)) %>% 
+#     mutate(
+#         translation = paste0(translation, " (", percent(lv, accuracy = 1), ")"),
+#         translation_ord = reorder_within(translation, lv, group),
+#         group = factor(group, levels = c("cat-ENG", "spa-ENG", "cat-SPA"), ordered = TRUE)
+#     ) %>% 
+#     left_join(select(empirical_accuracy, group, translation, prop)) 
+# 
+# post_re %>% 
+#     ggplot(aes(x = .mean, y = translation_ord)) +
+#     facet_wrap(~group, scales = "free_y", ncol = 1) +
+#     geom_errorbar(aes(xmin = .lower, xmax = .upper),
+#                   size = 0.5, width = 0.75, alpha = 0.25,
+#                   colour = my_colours[1],
+#                   position = position_dodge(width = 0.5)) + 
+#     geom_point(aes(x = prop), size = 1.25, alpha = 0.25,
+#                colour = my_colours[1],
+#                position = position_dodge(width = 0.5)) +
+#     geom_smooth(aes(group = 1), orientation = "y", alpha = 0.25, size = 1,
+#                 method = "glm", method.args = list(family = "binomial"),
+#                 colour = my_colours[1], fill = my_colours[1]) +
+#     labs(
+#         x = "P(correct)",
+#         y = "Item (ordered by phonological similarity)",
+#         colour = "Study",
+#         fill = "Study"
+#     ) +
+#     scale_x_continuous(limits = c(0, 1), labels = percent) +
+#     scale_y_reordered() +
+#     theme(
+#         legend.position = "top",
+#         legend.key = element_rect(fill = NA, colour = NA),
+#         axis.text.x = element_blank(),
+#         axis.ticks = element_blank(),
+#         axis.title = element_text(size = 10),
+#         panel.grid.major.x = element_blank(),
+#         plot.caption = element_text(
+#             size = 9, hjust = 0, face = "plain",
+#             margin = margin(t = unit(3, "cm"))),
+#         plot.title.position = "plot",
+#         plot.title = element_text(hjust = 0, size = 13),
+#         plot.background = element_rect(fill = "white", colour = NA),
+#         plot.subtitle = element_text(hjust = 0, face = "plain", size = 13)
+#     ) +
+#     coord_flip() 
+
+```
+
+## Interim discussion
+
+* Listeners of an unfamiliar language exploit **cognateness** to translate words
+* **Cross-language neighbourhood density** does not seem to play a critical role during non-native word recognition
+* Participants seem to have **prior knowledge of some words**, which might allow for correct translation in absence of cognateness
+
+# Study 2
+
+## Aim 
+
+Getting additional information about participant's prior familiarity with some stimuli from Study 1.
+
+## Design
+
+![](img/translation_questionnaire.png){fig-align="center"}
+
+
+## Participants
+
+```{r}
+#| label: questionnaire-participants-sample-sizes
+questionnaire_participants_total <- nrow(distinct(results$questionnaire_participants, participant_id))
+questionnaire_participants_group <- count(results$questionnaire_participants, group)
+```
+
+**`r questionnaire_participants_total` participants**
+
+<br>
+<br>
+
+```{r}
+#| label: tbl-questionnaire-participants
+#| out-width: 100%
+#| results: asis
+results$questionnaire_participants %>% 
+    mutate(
+        across(c(ends_with("_oral"), ends_with("_written"), age), as.integer),
+        language_oral = ifelse(language=="Catalan", cat_oral_comp, spa_oral_comp),
+        language_writ = ifelse(language=="Catalan", cat_writ_prod, spa_writ_prod),
+    ) %>% 
+    group_by(group) %>% 
+    summarise(
+        n = n(),
+        age_mean = mean(age, na.rm = TRUE),
+        age_sd = sd(age, na.rm = TRUE),
+        language_oral_mean = mean(language_oral, na.rm = TRUE),
+        language_oral_sd = sd(language_oral, na.rm = TRUE),
+        language_writ_mean = mean(language_writ, na.rm = TRUE),
+        language_writ_sd = sd(language_writ, na.rm = TRUE),
+        .groups = "drop"
+    ) %>% 
+    gt() %>% 
+    tab_header(title = "Participant characteristics") %>% 
+    fmt_integer(n) %>% 
+    fmt_number(age_mean:age_sd) %>% 
+    fmt_number(c(matches("oral|writ"), n, -matches("data"))) %>% 
+    cols_merge_uncert(col_val = age_mean, col_uncert = age_sd) %>% 
+    cols_merge_uncert(col_val = language_oral_mean, col_uncert = language_oral_sd) %>% 
+    cols_merge_uncert(col_val = language_writ_mean, col_uncert = language_writ_sd) %>% 
+    cols_label(
+        group = "Group",
+        n = "N",
+        age_mean = "Age (years)",
+        language_oral_mean = "Oral proficiency",
+        language_writ_mean = "Written proficiency"
+    ) %>% 
+    tab_style(cell_text(weight = "bold"), cells_column_labels()) %>% 
+    tab_options(container.width = 800, container.height = 800) 
+
+
+```
+
+
+
+## Results
+
+
+### Regression coefficients
+
+```{r}
+#| label: tbl-model-coefsç
+coefs <- model_parameters(results$questionnaire_fit_5) %>%
+    as_tibble() %>% 
+    clean_names() %>% 
+    mutate(
+        parameter = str_remove(parameter, "b_"),
+        across(median:ci_high, ~ifelse(parameter=="(Intercept)", plogis(.), ./4))
+    ) %>% 
+    select(-ci) 
+
+coefs %>% 
+    mutate(
+        parameter = factor(
+            parameter,
+            levels = names(str_repl),
+            labels = str_repl,
+            ordered = TRUE
+        ),
+        across(starts_with("ci_"), ~percent(., accuracy = 0.01)),
+        ci = paste("[", ci_low, ", ", ci_high, "]")
+    ) %>% 
+    arrange(parameter) %>% 
+    select(-starts_with("ci_"), -c(rhat, ess)) %>% 
+    relocate(parameter, median, ci, pd) %>% 
+    gt() %>% 
+    fmt_percent(c(median, pd)) %>% 
+    cols_label(
+        parameter = "Predictor",
+        median = "Median",
+        ci = "95% CrI",
+        pd = "P(Direction)"
+    ) %>% 
+    cols_align(align = "right")
+```
+
+---
+
+### Regression coefficients
+
+```{r}
+#| label: fig-joint-coefs
+#| fig-height: 5
+#| fig-width: 8.5
+# fixed effects
+questionnaire_post_draws <- gather_draws(results$questionnaire_fit_5, `b_.*`, regex = TRUE) 
+
+list("Study 1" = post_draws, "Study 2" = questionnaire_post_draws) %>% 
+    bind_rows(.id = "study") %>% 
+    filter(str_detect(.variable, "b_")) %>% 
+    mutate(
+        .variable_name = factor(
+            gsub("b_", "", .variable),
+            levels = names(str_repl),
+            labels = str_repl
+        ),
+        .value = logit_to_prob(.value, .variable)
+    ) %>% 
+    arrange(.variable) %>% 
+    ggplot(aes(.value, fct_rev(.variable_name), fill = study, colour = study)) +
+    geom_vline(size = 1, xintercept = 0, colour = "grey") +
+    stat_slab(size = 1, position = position_nudge(y = 0.15), fill = NA, scale = 0.5) +
+    stat_pointinterval(position = position_dodge(width = 0.3), .width = 0.95, point_size = 1.5, interval_size = 3) +
+    scale_fill_manual(values = my_colours, na.translate = FALSE) +
+    scale_x_continuous(labels = ~percent(., accuracy = 1), breaks = seq(-1, 1, 0.1)) +
+    labs(
+        x = "P(Correct)", 
+        y = "Posterior probability density",
+        fill = "Study",
+        colour = "Study"
+    ) +
+    theme(
+        legend.position = "top",
+        legend.title = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text = element_text(colour = "black", hjust = 1, size = 12),
+        axis.ticks.y = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", size = 0.5, linetype = "dotted"),
+        panel.grid.major.y = element_blank()
+    ) 
+
+```
+
+---
+
+#### Population-level marginal effects
+
+```{r}
+#| label: fig-joint-marginal-effects
+#| fig-width: 9
+#| fig-height: 4
+#| warnings: false
+#| messages: false
+questionnaire_m <- add_epred_draws(
+    nd,
+    results$fit_5, 
+    re_formula = NA,
+    ndraws = 50
+) %>% 
+    mutate(
+        nd_lab = rescale_values(nd_std, results$fit_5$data$nd) %>% 
+            round(2) %>% 
+            paste0(" neighbours") %>% 
+            factor(levels = paste0(c(0, 3, 6), " neighbours")),
+        lv = rescale_values(lv_std, results$questionnaire_responses$lv)
+    )
+
+bind_rows(
+    list("Study 1" = m, "Study 2" = questionnaire_m),
+    .id = "study"
+) %>% 
+    ggplot(aes(x = lv, y = .epred, colour = study)) +
+    facet_wrap(~nd_lab, nrow = 1) +
+    geom_line(aes(group = interaction(nd_std, .draw, study)),
+              size = 0.75, alpha = 0.1) +
+    geom_hline(yintercept = 0.5, size = 1) +
+    stat_summary(fun = mean, geom = "line", size = 1) +
+    labs(
+        x = "Phonological similarity (Levenshtein)",
+        y = "P(Correct)",
+        title = "Population-level posterior predictions"
+    ) +
+    scale_x_continuous(labels = percent) +
+    scale_y_continuous(labels = percent) +
+    theme(
+        legend.position = "none",
+        plot.title = element_blank()
+    )
+```
+
+---
+
+### Accuracy by confidence and knowledge
+
+```{r}
+#| label: results-accuracy-confidence
+#| warning: false
+# plot response confidence
+results$questionnaire_responses %>%
+    mutate(
+        correct = as.integer(correct),
+        knowledge = ifelse(knowledge, "Knows", "Doesn't know")
+    ) %>% 
+    ggplot(aes(confidence, correct, colour = group, fill = group)) +
+    facet_grid(~knowledge) +
+    geom_point(
+        position = position_jitterdodge(jitter.width = 0.15, jitter.height = 0.1, dodge.width = 0.3),
+        alpha = 0.25, size = 0.5
+    ) +
+    geom_smooth(method = "glm", method.args = list(family = "binomial")) +
+    labs(x = "Confidence", y = "P(correct)", colour = "Group", fill = "Group") +
+    scale_colour_manual(values = c("#1A85FF", "#ff2976")) +
+    scale_fill_manual(values = c("#1A85FF", "#ff2976")) +
+    scale_x_continuous(breaks = 0:7) +
+    scale_y_continuous(labels = percent, breaks = seq(0, 1, 0.25)) +
+    theme_custom() +
+    theme(
+        legend.position = "top"
+    )
+```
+
+
+# Next steps
+
+## Confidence and knowledge as predictors
+
+Introduce `knowledge` and `confidence` ratings from Study 2 as predictors: model estimates and predictions will be corrected by participant's previous familiarity with words.
+
+
+# Appendix
+
+## Lexical frequency distribution
+
+```{r}
+#| label: fig-stimuli-freq
+results$stimuli %>% 
+    distinct(group, word_1, .keep_all = TRUE) %>% 
+    left_join(count(., group, name = "n_total")) %>% 
+    mutate(test_language = paste0(group,  " (N = ", n_total, ")")) %>% 
+    ggplot(aes(freq_zipf_2, fill = group)) +
+    facet_wrap(~group) +
+    geom_histogram(bins = 15, colour = "white") +
+    labs(
+        x = "Lexical frequency (Zipf score)", 
+        y = "# trials", 
+        fill = "Group"
+    )  +
+    theme(legend.position = "none")
+```
+
+## Cross-language neighbourhood density distribution
+
+```{r}
+#| label: fig-stimuli-nd
+results$stimuli %>% 
+    distinct(group, word_1, .keep_all = TRUE) %>% 
+    left_join(count(., group, name = "n_total")) %>% 
+    mutate(test_language = paste0(group,  " (N = ", n_total, ")")) %>% 
+    ggplot(aes(nd, fill = group)) +
+    facet_wrap(~group) +
+    geom_histogram(bins = 15, colour = "white") +
+    labs(
+        x = "Number of cross-language neighbours of the presented word", 
+        y = "# trials", 
+        fill = "Group"
+    )  +
+    theme(legend.position = "none")
+```
+
+## Levenshtein distance distribution
+
+```{r}
+#| label: fig-stimuli-lv
+results$stimuli %>% 
+    distinct(group, word_1, .keep_all = TRUE) %>% 
+    left_join(count(., group, name = "n_total")) %>% 
+    mutate(test_language = paste0(group,  " (N = ", n_total, ")")) %>% 
+    ggplot(aes(lv, fill = group)) +
+    facet_wrap(~group) +
+    geom_histogram(bins = 15, colour = "white") +
+    labs(
+        x = "Levenshtein distance (phonological similarity)", 
+        y = "# trials", 
+        fill = "Group"
+    )  +
+    theme(legend.position = "none")
+```
+
+## Model formula {.smaller}
+
+$$\begin{align}
+
+&\textbf{Likelihood}  \\
+y_{i} \sim& Bernoulli(p_{i}) && \text{[probability of correct translation]} \\ \\
+
+&\textbf{Parameters}  \\
+
+logit(p_{i}) = ~ &  \beta_{0[p,w]} ~ +  && \text{[linear model]}\\
+& \beta_{1[p]} ~ Frequency_{i} ~ + \\
+& \beta_{2[p]} ~ PTHN_i ~ + \\
+& \beta_{3[p]} ~ Similarity_i ~ + \\
+& \beta_{4[p]} ~ (PTHN_i \times Similarity_i) \\ \\
+
+\beta_{0-6[p,w]} \sim& ~  \mathcal{N}(\mu_{\beta_{j}}, \sigma_{\beta_{j}}) \text{, for participant } p ~\text{in 1, ..., } P ~\text{and  word } w ~\text{in 1, ..., } W && \text{[participant- and word-level intercepts]} \\
+\beta_{1-6[p]} \sim& ~  \mathcal{N}(\mu_{\beta_{j}}, \sigma_{\beta_{j}}) \text{, for participant } p ~\text{in 1, ..., } P
+&& \text{[participant-level coefficients]} \\ \\
+
+&\textbf{Prior}  \\
+
+\mu_{\beta_{p,w}} ~ \sim& ~ \mathcal{N}(0, 0.1) && \text{[participant-level coefficients]} \\
+\sigma_{\beta_{p}}, ~ \sigma_{\beta_{w}} \sim& ~ HalfCauchy(0, 0.1) && \text{[SD for population and participant]} \\
+\rho_{p}, ~ \rho_{w} \sim& ~LKJ(8) && \text{[correlation between participant-level coefficients]} \\
+
+
+\end{align}$$
+
+# References
+
