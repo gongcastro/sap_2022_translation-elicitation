@@ -325,21 +325,9 @@ Three predictors:
 - Multilevel (random effects by participants and word)
 - Bayesian (`brms`/Stan)
 
-:::{.callout-note}
-
-```{r}
-#| label: model-formula
-#| echo: true
-correct ~ 1 + freq_zipf_2_std + nd_std*lv_std + group + 
-                    (1 + freq_zipf_2_std + nd_std*lv_std | participant_id) +
-                    (1 + group | translation_id)
-```
-
-## Bayes theorem
 
 $$P(model | data) \propto P(data | model) \times P(model)$$
 
-:::
 
 ## Stimuli
 
