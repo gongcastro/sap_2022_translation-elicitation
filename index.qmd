@@ -18,7 +18,7 @@ csl: "apa7.csl"
 
 # Cognateness and non-native spoken word recognition {background-color="white"}
 
-<br><br>
+<br>
 
 Gonzalo Garcia-Castro &nbsp; [`r fontawesome::fa("github", "black")`](https://github.com/gongcastro), 
 Serene Siow, Nuria Sebastian-Galles, Kim Plunkett
@@ -201,17 +201,19 @@ Reliance on the conceptual or the lexical route is modulated by **proficiency** 
 
 As proficiency increases, word-level variables exert a lesser impact on L2 comprehension.
 
-Revised Hierarchical Model [RMS; @degroot1994forward]
+Revised Hierarchical Model [RMS, @degroot1994forward]
 
 ---
 
 * More recent papers have found no differences in sensitivity to cognateness between low- and high-proficiency bilinguals. [@christoffels2006memory].
 
-* **Multilink model** simulates data from translation experiments [@christoffels2006memory] without any word-to-word link across languages @dijkstra2019multilink].
+* **Multilink model** simulates data from translation experiments [@christoffels2006memory] without any word-to-word link across languages [@dijkstra2019multilink].
 
 <br>
 
+:::{.callout-important icon=false}
 Are word-to-word links really necessary for translation?
+:::
 
 ---
 
@@ -235,7 +237,7 @@ Unfamiliar listeners $\equiv$ Low proficiency bilinguals
 
 ## The present study
 
-::: {.callout-tip}
+::: {.callout-tip icon=false}
 
 ## Hypotheses
 
@@ -321,10 +323,23 @@ Three predictors:
 
 - Binomial logistic regression (correct/incorrect)
 - Multilevel (random effects by participants and word)
-- Bayesian:
+- Bayesian (`brms`/Stan)
+
+:::{.callout-note}
+
+```{r}
+#| label: model-formula
+#| echo: true
+correct ~ 1 + freq_zipf_2_std + nd_std*lv_std + group + 
+                    (1 + freq_zipf_2_std + nd_std*lv_std | participant_id) +
+                    (1 + group | translation_id)
+```
+
+## Bayes theorem
 
 $$P(model | data) \propto P(data | model) \times P(model)$$
 
+:::
 
 ## Stimuli
 
@@ -488,10 +503,15 @@ post_draws %>%
     ) %>% 
     arrange(.variable) %>% 
     ggplot(aes(.value, fct_rev(.variable_name))) +
-    geom_vline(xintercept = 0, colour = "grey", size = 1) + 
-    stat_slab(size = 1, position = position_nudge(y = 0.15),
-              fill = NA, scale = 0.5, colour = my_colours[1]) +
-    stat_pointinterval(position = position_dodge(width = 0.25), .width = 0.95,
+    geom_vline(xintercept = 0, colour = "grey", linewidth = 1) + 
+    stat_slab(linewidth = 1, position = position_nudge(y = 0.15),
+              scale = 0.5, colour = NA, 
+              fill = my_colours[1], alpha = 0.5) +
+    stat_slab(linewidth = 1.5, position = position_nudge(y = 0.15),
+              scale = 0.5, colour = "white", 
+              fill = NA) +
+    stat_pointinterval(position = position_dodge(width = 0.25), 
+                       .width = 0.95,
                        point_size = 2, interval_size = 1.25) +
     scale_fill_manual(values = my_colours, na.translate = FALSE) +
     scale_x_continuous(labels = ~percent(., accuracy = 1), breaks = seq(-1, 1, 0.1)) +
@@ -799,9 +819,17 @@ list("Study 1" = post_draws, "Study 2" = questionnaire_post_draws) %>%
     ) %>% 
     arrange(.variable) %>% 
     ggplot(aes(.value, fct_rev(.variable_name), fill = study, colour = study)) +
-    geom_vline(size = 1, xintercept = 0, colour = "grey") +
-    stat_slab(size = 1, position = position_nudge(y = 0.15), fill = NA, scale = 0.5) +
-    stat_pointinterval(position = position_dodge(width = 0.3), .width = 0.95, point_size = 1.5, interval_size = 3) +
+    geom_vline(linewidth = 1, xintercept = 0, colour = "grey") +
+    stat_slab(linewidth = 1,
+              position = position_nudge(y = 0.15),
+              scale = 0.5, 
+              alpha = 0.5) +
+    stat_pointinterval(
+        position = position_dodge(width = 0.3), 
+        .width = 0.95, 
+        point_size = 1.5,
+        interval_size = 3
+    ) +
     scale_fill_manual(values = my_colours, na.translate = FALSE) +
     scale_x_continuous(labels = ~percent(., accuracy = 1), breaks = seq(-1, 1, 0.1)) +
     labs(
@@ -816,7 +844,8 @@ list("Study 1" = post_draws, "Study 2" = questionnaire_post_draws) %>%
         axis.title.y = element_blank(),
         axis.text = element_text(colour = "black", hjust = 1, size = 12),
         axis.ticks.y = element_blank(),
-        panel.grid.major.x = element_line(colour = "grey", size = 0.5, linetype = "dotted"),
+        panel.grid.major.x = element_line(colour = "grey", linewidth = 0.5, 
+                                          linetype = "dotted"),
         panel.grid.major.y = element_blank()
     ) 
 
@@ -967,7 +996,7 @@ results$stimuli %>%
     theme(legend.position = "none")
 ```
 
-## Model formula {.smaller}
+## Model formula {.smaller .scrollable}
 
 $$\begin{align}
 
